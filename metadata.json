@@ -1,0 +1,7 @@
+{
+  "name": "AudioTranscriber Pro",
+  "description": "A professional audio playback and transcript synchronization tool with history management and AI-powered insights.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
