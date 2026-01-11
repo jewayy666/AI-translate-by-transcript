@@ -65,14 +65,15 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
 
 /**
  * 核心：生成逐字稿與分析
- * 採用「惰性初始化」與「環境變數優先」策略。
+ * 更新為 Vite 標準環境變數讀取方式。
  */
 export const generateTranscript = async (audioBlob: Blob) => {
-  // 1. 取得 API Key
-  // 優先檢查 Vite 標準變數，後援至 process.env
+  // 1. 取得 API Key (使用 Vite 標準 import.meta.env)
+  // 優先使用 VITE_GOOGLE_API_KEY，並保留 process.env.API_KEY 作為後援以符合系統規範
   const apiKey = (import.meta as any).env?.VITE_GOOGLE_API_KEY || process.env.API_KEY;
 
   if (!apiKey || apiKey === 'undefined' || apiKey.trim() === '') {
+    console.warn("未偵測到 VITE_GOOGLE_API_KEY，請檢查 Vercel 設定。");
     throw new Error(
       "未偵測到有效的 API Key。\n\n" +
       "1. 如果您正在使用自動分析模式：請在環境變數中設定 VITE_GOOGLE_API_KEY。\n" +
@@ -80,7 +81,7 @@ export const generateTranscript = async (audioBlob: Blob) => {
     );
   }
 
-  // 2. 初始化 AI 實例 (僅在此處進行，確保 JSON 模式完全不受影響)
+  // 2. 初始化 AI 實例 (Lazy Initialization)
   const ai = new GoogleGenAI({ apiKey });
 
   // 3. 處理音訊資料
