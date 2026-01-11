@@ -65,20 +65,22 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
 
 /**
  * 核心：生成逐字稿與分析
- * 採用「惰性初始化」策略，只有在被呼叫時才會檢查並初始化 GoogleGenAI。
+ * 採用「惰性初始化」與「環境變數優先」策略。
  */
 export const generateTranscript = async (audioBlob: Blob) => {
-  // 1. 取得 API Key (僅在此處檢查，避免初始化時崩潰)
-  const apiKey = process.env.API_KEY;
+  // 1. 取得 API Key
+  // 優先檢查 Vite 標準變數，後援至 process.env
+  const apiKey = (import.meta as any).env?.VITE_GOOGLE_API_KEY || process.env.API_KEY;
 
   if (!apiKey || apiKey === 'undefined' || apiKey.trim() === '') {
     throw new Error(
-      "未偵測到有效的 API Key。請確保環境變數 process.env.API_KEY 已正確設定。\n\n" +
-      "提示：如果您目前沒有 API Key，請在匯入時提供 JSON 內容即可正常使用播放功能。"
+      "未偵測到有效的 API Key。\n\n" +
+      "1. 如果您正在使用自動分析模式：請在環境變數中設定 VITE_GOOGLE_API_KEY。\n" +
+      "2. 如果您沒有 API Key：請在匯入時提供 JSON 內容即可直接播放。"
     );
   }
 
-  // 2. 初始化 AI 實例 (Lazy Init)
+  // 2. 初始化 AI 實例 (僅在此處進行，確保 JSON 模式完全不受影響)
   const ai = new GoogleGenAI({ apiKey });
 
   // 3. 處理音訊資料
@@ -99,7 +101,7 @@ Rules:
 1. Divide into 5-10s segments.
 2. For each segment, provide English text and Traditional Chinese (zh-TW) translation.
 3. LANGUAGE ANALYSIS: Identify keywords or phrases (CEFR B1+).
-4. For each keyword/phrase, provide: exact text, IPA, Chinese meaning, and a clear example sentence (example).
+4. For each keyword/phrase, provide: exact text, IPA, Chinese meaning, and a clear example sentence.
 5. Format: Strict JSON array.`,
           },
         ],
