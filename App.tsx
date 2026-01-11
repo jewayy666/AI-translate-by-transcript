@@ -1,12 +1,13 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import AudioPlayer from './components/AudioPlayer';
 import TranscriptViewer from './components/TranscriptViewer';
 import VocabSidebar from './components/VocabSidebar';
 import HistoryList from './components/HistoryList';
 import ImportDialog from './components/ImportDialog';
-import { HistoryItem } from './types';
+import { HistoryItem, Highlight } from './types';
 import { getAllItems, deleteItem as deleteFromDB } from './services/storageService';
+import { lookupVocabulary } from './services/aiService';
 
 const App: React.FC = () => {
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -15,11 +16,29 @@ const App: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  
+  const [vocabularyList, setVocabularyList] = useState<Highlight[]>([]);
+  const [isLookupLoading, setIsLookupLoading] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const historyRef = useRef<HistoryItem[]>([]);
 
   useEffect(() => { historyRef.current = history; }, [history]);
+
+  useEffect(() => {
+    const savedVocab = localStorage.getItem('my-vocabulary');
+    if (savedVocab) {
+      try {
+        setVocabularyList(JSON.parse(savedVocab));
+      } catch (err) {
+        console.error("解析 LocalStorage 單字庫失敗", err);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('my-vocabulary', JSON.stringify(vocabularyList));
+  }, [vocabularyList]);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -43,9 +62,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  /**
-   * 點擊逐字稿中的單字：使用 useCallback 確保參照穩定
-   */
   const handleTranscriptVocabClick = useCallback((text: string) => {
     const el = document.getElementById(`vocab-${text}`);
     if (el) {
@@ -55,13 +71,91 @@ const App: React.FC = () => {
     }
   }, []);
 
-  /**
-   * 點擊側邊欄中的單字：音訊跳轉
-   */
+  const handleAddToVocabulary = useCallback(async (text: string, time: number) => {
+    if (isLookupLoading) return;
+    
+    setIsLookupLoading(true);
+    try {
+      const result = await lookupVocabulary(text);
+      const newEntry = { ...result, timestamp: time }; 
+
+      setVocabularyList(prev => {
+        if (prev.some(v => v.text.toLowerCase() === newEntry.text.toLowerCase())) return prev;
+        return [newEntry, ...prev];
+      });
+
+      setTimeout(() => {
+        const el = document.getElementById(`vocab-${newEntry.text}`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    } catch (err: any) {
+      alert(err.message || "查詢失敗，請檢查網路或 API Key 設定。");
+    } finally {
+      setIsLookupLoading(false);
+    }
+  }, [isLookupLoading]);
+
+  const handleExportVocab = useCallback(() => {
+    const aiKeywords: Highlight[] = [];
+    if (activeItem) {
+      activeItem.lines.forEach(line => {
+        line.segments.forEach(seg => {
+          if (seg.highlights) {
+            aiKeywords.push(...seg.highlights);
+          }
+        });
+      });
+    }
+
+    const formatItem = (item: Highlight) => {
+      const word = item.text || "";
+      const ipa = item.ipa ? ` (${item.ipa})` : "";
+      const meaning = item.meaning || "";
+      const example = item.example || "N/A";
+      
+      return `${word}${ipa} - ${meaning}\r\nExample: ${example}\r\n---------------------------`;
+    };
+
+    let exportContent = "";
+
+    if (vocabularyList.length > 0) {
+      exportContent += "新增生詞\r\n---------------------------\r\n";
+      exportContent += vocabularyList.map(formatItem).join('\r\n');
+      exportContent += "\r\n\r\n";
+    }
+
+    if (aiKeywords.length > 0) {
+      const userVocabTexts = new Set(vocabularyList.map(v => (v.text || "").toLowerCase().trim()));
+      const filteredAiKeywords = aiKeywords.filter(h => !userVocabTexts.has((h.text || "").toLowerCase().trim()));
+
+      if (filteredAiKeywords.length > 0) {
+        exportContent += "智慧單字\r\n---------------------------\r\n";
+        exportContent += filteredAiKeywords.map(formatItem).join('\r\n');
+      }
+    }
+
+    if (!exportContent.trim()) {
+      alert('目前沒有單字可匯出');
+      return;
+    }
+
+    const blob = new Blob([exportContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `vocabulary_list_${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [vocabularyList, activeItem]);
+
   const handleSidebarVocabClick = useCallback((time: number, text: string) => {
     if (audioRef.current) {
       audioRef.current.currentTime = time;
       setCurrentTime(time);
+      audioRef.current.play().catch(() => {});
+      setIsPlaying(true);
     }
     
     const line = activeItem?.lines.find(l => l.startTime === time);
@@ -73,6 +167,13 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 text-gray-900 overflow-hidden font-sans">
+      {isLookupLoading && (
+        <div className="fixed top-4 right-4 z-[2000] bg-indigo-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center space-x-2 animate-bounce">
+          <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+          <span className="text-xs font-bold">AI 查詢中...</span>
+        </div>
+      )}
+
       {!activeItem && (
         <header className="bg-white border-b h-16 flex items-center px-6 shrink-0 z-20">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveItem(null)}>
@@ -94,7 +195,16 @@ const App: React.FC = () => {
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="flex w-full bg-white border-b shrink-0 z-30 shadow-sm h-20 items-center overflow-hidden">
               <div className="w-1/2 h-full border-r border-gray-100 flex items-center px-4">
-                <AudioPlayer ref={audioRef} url={activeItem.audioUrl} isPlaying={isPlaying} setIsPlaying={setIsPlaying} currentTime={currentTime} onTimeUpdate={setCurrentTime} onDurationChange={setDuration} seekTo={setCurrentTime} />
+                <AudioPlayer 
+                  ref={audioRef} 
+                  url={activeItem.audioUrl} 
+                  isPlaying={isPlaying} 
+                  setIsPlaying={setIsPlaying} 
+                  currentTime={currentTime} 
+                  onTimeUpdate={setCurrentTime} 
+                  onDurationChange={setDuration} 
+                  seekTo={handleSeek}
+                />
               </div>
               <div className="w-1/2 h-full px-6 flex items-center justify-between bg-slate-50/50">
                 <div className="truncate">
@@ -108,11 +218,22 @@ const App: React.FC = () => {
             </div>
 
             <div className="flex-1 grid grid-cols-12 overflow-hidden bg-white">
-              <div className="col-span-8 flex flex-col border-r border-gray-100 overflow-hidden">
-                <TranscriptViewer lines={activeItem.lines} onSeek={handleSeek} onVocabClick={handleTranscriptVocabClick} />
+              <div className="col-span-8 flex flex-col border-r border-gray-100 overflow-hidden relative">
+                <TranscriptViewer 
+                  lines={activeItem.lines} 
+                  currentTime={currentTime}
+                  onSeek={handleSeek} 
+                  onVocabClick={handleTranscriptVocabClick} 
+                  onAddToVocab={handleAddToVocabulary}
+                />
               </div>
               <div className="col-span-4 flex flex-col overflow-hidden">
-                <VocabSidebar lines={activeItem.lines} onVocabClick={handleSidebarVocabClick} />
+                <VocabSidebar 
+                  lines={activeItem.lines} 
+                  userVocab={vocabularyList}
+                  onVocabClick={handleSidebarVocabClick} 
+                  onExport={handleExportVocab}
+                />
               </div>
             </div>
           </div>

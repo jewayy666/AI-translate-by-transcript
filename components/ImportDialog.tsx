@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { HistoryItem, TranscriptLine, Highlight } from '../types';
 import { saveItem } from '../services/storageService';
 import { generateTranscript } from '../services/aiService';
@@ -14,6 +14,7 @@ type ImportMode = 'json';
 
 const ImportDialog: React.FC<ImportDialogProps> = ({ isOpen, onClose, onImportComplete }) => {
   const [name, setName] = useState('');
+  const [isManuallyEdited, setIsManuallyEdited] = useState(false); // 新增：追蹤使用者是否手動修改過名稱
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [importMode] = useState<ImportMode>('json');
@@ -22,12 +23,32 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ isOpen, onClose, onImportCo
   
   const transcriptFileInputRef = useRef<HTMLInputElement>(null);
 
+  // 當 Modal 關閉時重置所有狀態
+  useEffect(() => {
+    if (!isOpen) {
+      setName('');
+      setAudioFile(null);
+      setInputValue('');
+      setIsManuallyEdited(false);
+      setAiStatus(null);
+      setIsSubmitting(false);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
+  // ✅ [OPTIMIZED] 智慧填入邏輯：僅在名稱為空或未被手動編輯時覆蓋
   const handleAudioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
-      setAudioFile(e.target.files[0]);
-      if (!name) setName(e.target.files[0].name.replace(/\.[^/.]+$/, ""));
+      const file = e.target.files[0];
+      setAudioFile(file);
+      
+      // 邏輯：如果專案名稱目前是空的，或者是自動帶入且使用者還沒動過，則更新它
+      if (!name.trim() || !isManuallyEdited) {
+        const autoName = file.name.replace(/\.[^/.]+$/, "");
+        setName(autoName);
+        // 注意：這裡不設定 isManuallyEdited 為 true，因為這仍屬於自動行為
+      }
     }
   };
 
@@ -210,7 +231,10 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ isOpen, onClose, onImportCo
               required 
               type="text" 
               value={name} 
-              onChange={e => setName(e.target.value)} 
+              onChange={e => {
+                setName(e.target.value);
+                setIsManuallyEdited(true); // 標記為手動編輯
+              }} 
               placeholder="例如：TED Talk - The power of vulnerability" 
               className="w-full px-5 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all font-medium" 
             />

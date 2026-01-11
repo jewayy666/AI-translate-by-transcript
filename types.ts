@@ -3,8 +3,9 @@ export interface Highlight {
   text: string;
   ipa?: string;
   meaning: string;
-  example: string; // 新增例句欄位
+  example: string; 
   type: 'word' | 'phrase';
+  timestamp?: number; // 新增：記錄加入生詞時的時間戳記
 }
 
 export interface DialogueSegment {
