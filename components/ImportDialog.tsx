@@ -1,6 +1,5 @@
 
 import React, { useState, useRef } from 'react';
-import { parseTranscript } from '../utils';
 import { HistoryItem, TranscriptLine, Highlight } from '../types';
 import { saveItem } from '../services/storageService';
 import { generateTranscript } from '../services/aiService';
@@ -11,13 +10,13 @@ interface ImportDialogProps {
   onImportComplete: (item: HistoryItem) => void;
 }
 
-type ImportMode = 'text' | 'json';
+type ImportMode = 'json';
 
 const ImportDialog: React.FC<ImportDialogProps> = ({ isOpen, onClose, onImportComplete }) => {
   const [name, setName] = useState('');
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [inputValue, setInputValue] = useState('');
-  const [importMode, setImportMode] = useState<ImportMode>('text');
+  const [importMode] = useState<ImportMode>('json');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [aiStatus, setAiStatus] = useState<string | null>(null);
   
@@ -40,11 +39,6 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ isOpen, onClose, onImportCo
     reader.onload = (event) => {
       const content = event.target?.result as string;
       setInputValue(content);
-      if (file.name.toLowerCase().endsWith('.json')) {
-        setImportMode('json');
-      } else {
-        setImportMode('text');
-      }
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -71,18 +65,14 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ isOpen, onClose, onImportCo
     const highlights: Highlight[] = Array.isArray(rawHighlights) 
       ? rawHighlights
         .map((h: any): Highlight => {
-          // 深度映射內部 Key
           const text = h.text || h.word || h.w || h.keyword || "";
           const ipa = h.ipa || h.p || h.pronunciation || h.phonetic || "";
           const meaning = h.meaning || h.m || h.definition || h.zh || h.chinese || h.mean || h.translation || "";
           const example = h.example || h.x || h.sentence || h.ex || "";
-          
-          // Fix: Explicitly cast the resulting literal string to 'word' | 'phrase' to satisfy the Highlight interface.
           const type = (h.type === "phrase" ? "phrase" : "word") as 'word' | 'phrase';
-
           return { text, ipa, meaning, example, type };
         })
-        .filter(h => h.text.trim() !== "") // 過濾掉沒有單字內容的無效資料
+        .filter(h => h.text.trim() !== "") 
       : [];
 
     return { 
@@ -151,11 +141,9 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ isOpen, onClose, onImportCo
         finalTranscriptText = aiResult.map((r: any) => `${r.startTime}\n${r.speaker || 'Speaker'}: ${r.en}\n${r.zh}`).join('\n\n');
       } 
       // 2. JSON 模式
-      else if (importMode === 'json') {
+      else {
         try {
           let cleanedJson = inputValue.trim();
-          
-          // 支援多段貼上合併：將 ][ 替換為 , 並補全 []
           cleanedJson = cleanedJson.replace(/\]\s*\[/g, ',');
           if (!cleanedJson.startsWith('[')) cleanedJson = '[' + cleanedJson;
           if (!cleanedJson.endsWith(']')) cleanedJson = cleanedJson + ']';
@@ -173,16 +161,8 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ isOpen, onClose, onImportCo
         } catch (jsonErr: any) {
           throw new Error("JSON 解析失敗，請檢查內容格式：\n" + jsonErr.message);
         }
-      } 
-      // 3. Text 模式
-      else {
-        finalLines = parseTranscript(inputValue);
-        if (finalLines.length === 0) {
-          throw new Error("文字解析失敗。請確認是否包含時間戳記 (例如 00:00)。");
-        }
       }
 
-      // 建立專案
       const id = Math.random().toString(36).substr(2, 9);
       const audioUrl = URL.createObjectURL(audioFile);
       const newItem: HistoryItem = { 
@@ -215,7 +195,7 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ isOpen, onClose, onImportCo
         <div className="p-6 border-b flex justify-between items-center bg-slate-50">
           <div>
             <h2 className="text-xl font-bold text-slate-900">建立英語學習專案</h2>
-            <p className="text-xs text-slate-500 mt-0.5">匯入音檔並配對逐字稿內容</p>
+            <p className="text-xs text-slate-500 mt-0.5">匯入音檔並配對 JSON 逐字稿</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -259,42 +239,25 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ isOpen, onClose, onImportCo
             </div>
           </div>
 
-          {/* Transcript Tabs & Upload */}
+          {/* Transcript Upload */}
           <div className="space-y-3">
             <div className="flex items-center justify-between ml-1">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">逐字稿內容 (選填)</label>
-              <div className="flex items-center space-x-2 bg-slate-100 p-1 rounded-lg">
-                <div className="flex bg-slate-200 p-0.5 rounded-md">
-                  <button 
-                    type="button"
-                    onClick={() => setImportMode('text')}
-                    className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${importMode === 'text' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                  >
-                    Text
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setImportMode('json')}
-                    className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${importMode === 'json' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                  >
-                    JSON
-                  </button>
-                </div>
-                
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">JSON 逐字稿內容 (選填)</label>
+              <div className="flex items-center space-x-2">
                 <input 
                   type="file" 
                   ref={transcriptFileInputRef} 
                   onChange={handleTranscriptFileChange} 
-                  accept=".txt,.json" 
+                  accept=".json" 
                   className="hidden" 
                 />
                 <button 
                   type="button"
                   onClick={() => transcriptFileInputRef.current?.click()}
-                  className="flex items-center px-3 py-1 text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-md transition-all"
+                  className="flex items-center px-3 py-1.5 text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-md transition-all"
                 >
                   <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                  選擇檔案
+                  上傳 JSON 檔案
                 </button>
               </div>
             </div>
@@ -303,11 +266,7 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ isOpen, onClose, onImportCo
               <textarea 
                 value={inputValue} 
                 onChange={e => setInputValue(e.target.value)} 
-                placeholder={
-                  importMode === 'text' 
-                  ? "格式範例：\n00:00\nSpeaker: Hello world.\n你好世界。" 
-                  : "深度智慧映射已啟用：\n系統會自動識別 en/text, zh/mean, words/vocab 等欄位\n並自動修復、合併 Part 1, Part 2 等多段 JSON 內容"
-                } 
+                placeholder="深度智慧映射已啟用：\n系統會自動識別 en/text, zh/mean, words/vocab 等欄位\n留空將自動啟動 Gemini AI 深度分析" 
                 className="w-full h-40 px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all font-mono text-xs leading-relaxed resize-none"
               />
               {inputValue.trim() === "" && (

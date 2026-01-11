@@ -1,8 +1,9 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
-
+/**
+ * 音訊處理輔助：AudioBuffer 轉 WAV 格式
+ */
 const audioBufferToWav = (buffer: AudioBuffer): Blob => {
   const length = buffer.length * 2;
   const bufferArray = new ArrayBuffer(44 + length);
@@ -33,6 +34,9 @@ const audioBufferToWav = (buffer: AudioBuffer): Blob => {
   return new Blob([bufferArray], { type: 'audio/wav' });
 };
 
+/**
+ * 音訊處理輔助：壓縮音訊以符合 API 限制
+ */
 const compressAudio = async (audioBlob: Blob): Promise<Blob> => {
   const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
   const arrayBuffer = await audioBlob.arrayBuffer();
@@ -47,6 +51,9 @@ const compressAudio = async (audioBlob: Blob): Promise<Blob> => {
   return audioBufferToWav(renderedBuffer);
 };
 
+/**
+ * 輔助：Blob 轉 Base64
+ */
 const blobToBase64 = (blob: Blob): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -56,11 +63,29 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
+/**
+ * 核心：生成逐字稿與分析
+ * 採用「惰性初始化」策略，只有在被呼叫時才會檢查並初始化 GoogleGenAI。
+ */
 export const generateTranscript = async (audioBlob: Blob) => {
-  const ai = getAI();
+  // 1. 取得 API Key (僅在此處檢查，避免初始化時崩潰)
+  const apiKey = process.env.API_KEY;
+
+  if (!apiKey || apiKey === 'undefined' || apiKey.trim() === '') {
+    throw new Error(
+      "未偵測到有效的 API Key。請確保環境變數 process.env.API_KEY 已正確設定。\n\n" +
+      "提示：如果您目前沒有 API Key，請在匯入時提供 JSON 內容即可正常使用播放功能。"
+    );
+  }
+
+  // 2. 初始化 AI 實例 (Lazy Init)
+  const ai = new GoogleGenAI({ apiKey });
+
+  // 3. 處理音訊資料
   const compressedBlob = await compressAudio(audioBlob);
   const base64Audio = await blobToBase64(compressedBlob);
 
+  // 4. 呼叫 Gemini 模型
   const response = await ai.models.generateContent({
     model: "gemini-3-pro-preview", 
     contents: [
@@ -101,7 +126,7 @@ Rules:
                   text: { type: Type.STRING },
                   ipa: { type: Type.STRING },
                   meaning: { type: Type.STRING },
-                  example: { type: Type.STRING }, // 新增 JSON Schema 欄位
+                  example: { type: Type.STRING },
                   type: { type: Type.STRING, enum: ["word", "phrase"] }
                 },
                 required: ["text", "meaning", "example", "type"]
@@ -115,8 +140,11 @@ Rules:
   });
 
   try {
-    return JSON.parse(response.text || "[]");
+    const resultText = response.text;
+    if (!resultText) throw new Error("AI 回傳內容為空。");
+    return JSON.parse(resultText);
   } catch (err) {
-    throw new Error("AI 語言分析解析失敗。");
+    console.error("AI JSON Parse Error:", err);
+    throw new Error("AI 語言分析結果解析失敗，請稍後再試。");
   }
 };
