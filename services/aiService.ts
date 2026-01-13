@@ -3,7 +3,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Highlight } from "../types";
 
 /**
- * 音訊處理輔助：AudioBuffer 轉 WAV 格式
+ * Audio processing helper: AudioBuffer to WAV format
  */
 const audioBufferToWav = (buffer: AudioBuffer): Blob => {
   const length = buffer.length * 2;
@@ -36,7 +36,7 @@ const audioBufferToWav = (buffer: AudioBuffer): Blob => {
 };
 
 /**
- * 音訊處理輔助：壓縮音訊以符合 API 限制
+ * Audio processing helper: compress audio to fit API limits
  */
 const compressAudio = async (audioBlob: Blob): Promise<Blob> => {
   const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -53,7 +53,7 @@ const compressAudio = async (audioBlob: Blob): Promise<Blob> => {
 };
 
 /**
- * 輔助：Blob 轉 Base64
+ * Helper: Blob to Base64
  */
 const blobToBase64 = (blob: Blob): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -65,27 +65,11 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
 };
 
 /**
- * 取得 API Key 的輔助函式
- */
-const getApiKey = () => {
-  const apiKey = (import.meta as any).env?.VITE_GOOGLE_API_KEY || process.env.API_KEY;
-  if (!apiKey || apiKey === 'undefined' || apiKey.trim() === '') {
-    console.warn("未偵測到 VITE_GOOGLE_API_KEY，請檢查 Vercel 設定。");
-    return null;
-  }
-  return apiKey;
-};
-
-/**
- * 查詢單字/片語詳細資訊
+ * Lookup detailed vocabulary information using Gemini API
  */
 export const lookupVocabulary = async (text: string): Promise<Highlight> => {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    throw new Error("需要 API Key 才能使用 AI 查詢功能。");
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
+  // Always initialize with process.env.API_KEY as per guidelines.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: `Explain the English text "${text}" for an English learner. 
@@ -113,7 +97,8 @@ Output strictly in JSON format with these fields:
   });
 
   try {
-    const data = JSON.parse(response.text);
+    const resultText = response.text || "{}";
+    const data = JSON.parse(resultText);
     return {
       text: data.text,
       meaning: data.translation,
@@ -123,25 +108,16 @@ Output strictly in JSON format with these fields:
     };
   } catch (err) {
     console.error("Lookup JSON Parse Error:", err);
-    throw new Error("AI 查詢結果解析失敗。");
+    throw new Error("Failed to parse AI lookup result.");
   }
 };
 
 /**
- * 核心：生成逐字稿與分析
+ * Core: Generate transcript and language analysis using Gemini API
  */
 export const generateTranscript = async (audioBlob: Blob) => {
-  const apiKey = getApiKey();
-
-  if (!apiKey) {
-    throw new Error(
-      "未偵測到有效的 API Key。\n\n" +
-      "1. 如果您正在使用自動分析模式：請在環境變數中設定 VITE_GOOGLE_API_KEY。\n" +
-      "2. 如果您沒有 API Key：請在匯入時提供 JSON 內容即可直接播放。"
-    );
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
+  // Always initialize with process.env.API_KEY as per guidelines.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const compressedBlob = await compressAudio(audioBlob);
   const base64Audio = await blobToBase64(compressedBlob);
 
@@ -200,10 +176,10 @@ Rules:
 
   try {
     const resultText = response.text;
-    if (!resultText) throw new Error("AI 回傳內容為空。");
+    if (!resultText) throw new Error("AI response content is empty.");
     return JSON.parse(resultText);
   } catch (err) {
     console.error("AI JSON Parse Error:", err);
-    throw new Error("AI 語言分析結果解析失敗，請稍後再試。");
+    throw new Error("Failed to parse AI transcription results.");
   }
 };

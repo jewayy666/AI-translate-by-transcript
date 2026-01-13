@@ -62,7 +62,6 @@ const TranscriptRow = memo(({ block, onSeek, onVocabClick, isFocused, index, onC
         isFocused ? 'border-indigo-600 bg-indigo-50/60 shadow-inner' : 'border-transparent hover:bg-slate-50/50'
       }`}
     >
-      {/* 點擊時間戳記仍保留跳轉功能 (作為主動跳轉手段) */}
       <aside 
         onClick={(e) => { e.stopPropagation(); onSeek(block.startTime); }}
         className={`w-16 shrink-0 flex items-start justify-center py-6 font-mono text-xs transition-all group/time ${isFocused ? 'text-indigo-600 font-bold' : 'text-gray-400 hover:text-indigo-600'}`}
@@ -104,12 +103,11 @@ const TranscriptViewer: React.FC<TranscriptViewerProps> = memo(({ lines, current
   const [selectedText, setSelectedText] = useState("");
   const [selectedTime, setSelectedTime] = useState(0);
 
-  // 初始化 refs 陣列
   useEffect(() => {
     itemRefs.current = itemRefs.current.slice(0, lines.length);
   }, [lines]);
 
-  // 【核心】自動置中捲動邏輯 (與播放解耦)
+  // 自動置中捲動
   useEffect(() => {
     const targetElement = itemRefs.current[readingIndex];
     if (targetElement) {
@@ -119,6 +117,27 @@ const TranscriptViewer: React.FC<TranscriptViewerProps> = memo(({ lines, current
       });
     }
   }, [readingIndex]);
+
+  // 【核心】鍵盤導覽邏輯：解耦 ArrowUp/Down，不執行 onSeek
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    const activeTag = document.activeElement?.tagName;
+    if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+
+    if (e.code === 'ArrowUp') {
+      e.preventDefault();
+      const nextIdx = Math.max(0, readingIndex - 1);
+      onFocusSegment(nextIdx);
+    } else if (e.code === 'ArrowDown') {
+      e.preventDefault();
+      const nextIdx = Math.min(lines.length - 1, readingIndex + 1);
+      onFocusSegment(nextIdx);
+    }
+  }, [readingIndex, lines.length, onFocusSegment]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
   
   const handlePrev = useCallback(() => {
     const nextIdx = Math.max(0, readingIndex - 1);
@@ -148,22 +167,22 @@ const TranscriptViewer: React.FC<TranscriptViewerProps> = memo(({ lines, current
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-white relative" onContextMenu={handleContextMenu}>
-      <header className="border-b bg-slate-50 flex items-center px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest sticky top-0 z-10 shrink-0 shadow-sm transition-colors">
+    <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-950 relative" onContextMenu={handleContextMenu}>
+      <header className="border-b dark:border-gray-800 bg-slate-50 dark:bg-gray-900 flex items-center px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest sticky top-0 z-10 shrink-0 shadow-sm transition-colors">
         <div className="w-16 shrink-0 text-center">Time</div>
-        <div className="flex-1 px-4 border-l border-slate-200 flex items-center justify-between">
-          <span>Decoupled Reading Mode (Navigating won't interrupt audio)</span>
+        <div className="flex-1 px-4 border-l border-slate-200 dark:border-gray-800 flex items-center justify-between">
+          <span>Decoupled Reading Mode (↑/↓ to Navigate)</span>
           
           <div className="flex items-center space-x-2">
             <button 
               onClick={handlePrev}
-              className="px-2 py-1 bg-white border border-slate-200 rounded text-indigo-600 hover:bg-indigo-50 transition-colors shadow-sm active:scale-95"
+              className="px-2 py-1 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors shadow-sm active:scale-95"
             >
               PREV
             </button>
             <button 
               onClick={handleNext}
-              className="px-2 py-1 bg-white border border-slate-200 rounded text-indigo-600 hover:bg-indigo-50 transition-colors shadow-sm active:scale-95"
+              className="px-2 py-1 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors shadow-sm active:scale-95"
             >
               NEXT
             </button>
@@ -172,7 +191,7 @@ const TranscriptViewer: React.FC<TranscriptViewerProps> = memo(({ lines, current
       </header>
       
       <main ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar relative">
-        <section className="divide-y divide-gray-100 pb-[50vh]">
+        <section className="divide-y divide-gray-100 dark:divide-gray-800 pb-[50vh]">
           {lines.map((block, i) => {
             const isFocused = i === readingIndex;
             return (
