@@ -7,7 +7,7 @@ interface VocabSidebarProps {
   lines: TranscriptLine[];
   userVocab?: Highlight[];
   onVocabClick: (time: number, text: string) => void;
-  onExport?: () => void; // ✅ 新增：匯出回呼
+  onExport?: () => void;
 }
 
 const VocabSidebar: React.FC<VocabSidebarProps> = ({ lines, userVocab = [], onVocabClick, onExport }) => {
@@ -38,51 +38,68 @@ const VocabSidebar: React.FC<VocabSidebarProps> = ({ lines, userVocab = [], onVo
       key={i} 
       id={`vocab-${v.info.text}`}
       onClick={() => onVocabClick(v.time, v.info.text)}
-      className={`p-3 rounded-xl border transition-all cursor-pointer group ${v.isUser ? 'border-amber-200 bg-amber-50/50 hover:border-amber-400' : 'border-gray-100 hover:border-indigo-300 hover:bg-indigo-50/50'}`}
+      className={`p-5 rounded-2xl border transition-all cursor-pointer group shadow-sm ${
+        v.isUser 
+          ? 'border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-900/10 hover:border-amber-400' 
+          : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/40 hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/20'
+      }`}
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-baseline space-x-2">
-          <span className={`font-bold ${v.isUser ? 'text-amber-900' : 'text-indigo-900 group-hover:text-indigo-600'}`}>{v.info.text}</span>
-          {v.info.ipa && <span className="text-[10px] text-slate-400 font-mono italic">{v.info.ipa}</span>}
-        </div>
-        <div className="flex items-center space-x-2">
+      <div className="flex items-start justify-between">
+        <div className="flex flex-col space-y-1">
+          <div className="flex items-center space-x-2">
+            <span className={`text-xl font-bold transition-colors ${v.isUser ? 'text-amber-900 dark:text-amber-400' : 'text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400'}`}>
+              {v.info.text}
+            </span>
+            {v.info.ipa && (
+              <span className="text-sm text-gray-500 dark:text-gray-400 font-mono italic">
+                [{v.info.ipa}]
+              </span>
+            )}
+          </div>
           {v.isUser && (
-            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-200 text-amber-700 uppercase">Note</span>
+            <span className="w-fit text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-200 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 uppercase tracking-tighter">
+              User Note
+            </span>
           )}
-          {/* ✅ [NEW] 時間戳記跳轉按鈕 */}
+        </div>
+        <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
           <button 
-            className="p-1 rounded bg-slate-100 text-slate-400 hover:bg-indigo-600 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg bg-slate-100 dark:bg-gray-800 text-slate-400 dark:text-gray-500 hover:bg-indigo-600 hover:text-white transition-colors shadow-sm"
             onClick={(e) => {
               e.stopPropagation();
               onVocabClick(v.time, v.info.text);
             }}
-            title={`跳轉至 ${formatTime(v.time)}`}
           >
-            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
           </button>
         </div>
       </div>
-      <p className="text-sm text-slate-600 mt-1">{v.info.meaning}</p>
+
+      <p className="text-lg font-medium text-gray-700 dark:text-gray-300 mt-3 leading-relaxed">
+        {v.info.meaning}
+      </p>
+
       {v.info.example && (
-        <p className="text-[12px] text-slate-400 italic mt-1.5 leading-snug">
-          {v.info.example}
-        </p>
+        <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-900/60 rounded-xl border border-gray-100 dark:border-gray-800">
+          <p className="text-base text-gray-600 dark:text-gray-300 italic leading-relaxed">
+            "{v.info.example}"
+          </p>
+        </div>
       )}
     </div>
   );
 
   return (
-    <div className="h-full flex flex-col bg-white border-l border-gray-200 overflow-hidden">
-      <div className="p-4 border-b bg-slate-50 shrink-0 flex items-center justify-between">
-        <h3 className="font-bold text-slate-800 flex items-center">
-          <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
-          智慧單字庫 ({autoVocab.length + userVocab.length})
+    <div className="h-full flex flex-col bg-white dark:bg-gray-900 transition-colors duration-300">
+      <div className="p-4 border-b dark:border-gray-800 bg-slate-50 dark:bg-gray-900 shrink-0 flex items-center justify-between">
+        <h3 className="font-bold text-slate-800 dark:text-gray-100 text-sm flex items-center">
+          <svg className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+          單字庫 ({autoVocab.length + userVocab.length})
         </h3>
-        {/* ✅ [NEW] 匯出按鈕 */}
-        {(autoVocab.length > 0 || userVocab.length > 0) && onExport && (
+        {onExport && (
           <button 
             onClick={onExport}
-            className="p-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded-lg flex items-center space-x-1 transition-colors"
+            className="p-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg flex items-center space-x-1 transition-colors"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
             <span>匯出</span>
@@ -90,27 +107,27 @@ const VocabSidebar: React.FC<VocabSidebarProps> = ({ lines, userVocab = [], onVo
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-6">
+      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-8 bg-slate-50/20 dark:bg-gray-950/20">
         {allWords.length > 0 && (
           <section>
-            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">重點單字</h4>
-            <div className="space-y-3">
+            <h4 className="text-[10px] font-black text-slate-400 dark:text-gray-600 uppercase tracking-widest mb-4 ml-1">Key Vocabulary</h4>
+            <div className="space-y-5">
               {allWords.map((v, i) => renderVocabCard(v, i))}
             </div>
           </section>
         )}
         {phrases.length > 0 && (
           <section>
-            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">實用語塊 / 片語</h4>
-            <div className="space-y-3">
+            <h4 className="text-[10px] font-black text-slate-400 dark:text-gray-600 uppercase tracking-widest mb-4 ml-1">Useful Phrases</h4>
+            <div className="space-y-5">
               {phrases.map((v, i) => renderVocabCard(v, i))}
             </div>
           </section>
         )}
         {allWords.length === 0 && phrases.length === 0 && (
-          <div className="text-center py-20 opacity-30">
-            <svg className="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 14l9-5-9-5-9 5 9 5z" /><path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" /></svg>
-            <p className="text-xs">尚無單字資訊</p>
+          <div className="text-center py-20 opacity-30 dark:opacity-20">
+            <svg className="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 14l9-5-9-5-9 5 9 5z" /><path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" /></svg>
+            <p className="text-xs font-bold uppercase tracking-widest">Empty Library</p>
           </div>
         )}
       </div>

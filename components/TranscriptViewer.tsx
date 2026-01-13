@@ -1,11 +1,14 @@
 
-import React, { useRef, memo, useState, useEffect, useCallback } from 'react';
+import React, { useRef, memo, useState, useEffect, useCallback, useMemo } from 'react';
 import { TranscriptLine, Highlight } from '../types';
 import ContextMenu from './ContextMenu';
+import { formatTime } from '../utils';
 
 interface TranscriptViewerProps {
   lines: TranscriptLine[];
   currentTime: number;
+  readingIndex: number;
+  onFocusSegment: (index: number) => void;
   onSeek: (time: number) => void;
   onVocabClick: (text: string) => void;
   onAddToVocab: (text: string, time: number) => void;
@@ -27,7 +30,7 @@ const renderHighlightedText = (text: string, highlights: Highlight[], onVocabCli
             e.stopPropagation();
             onVocabClick(isMatch.text);
           }}
-          className="text-red-600 font-bold border-b-2 border-transparent hover:border-red-600 transition-all cursor-pointer mx-0.5 select-text"
+          className="text-red-600 font-medium border-b-2 border-transparent hover:border-red-600 transition-all cursor-pointer mx-0.5 select-text"
           style={{ userSelect: 'text' }}
           title={`${isMatch.ipa} - ${isMatch.meaning}`}
         >
@@ -39,19 +42,18 @@ const renderHighlightedText = (text: string, highlights: Highlight[], onVocabCli
   });
 };
 
-const TranscriptRow = memo(({ block, onSeek, onVocabClick, isFocused, index, onClick }: { 
+const TranscriptRow = memo(({ block, onSeek, onVocabClick, isFocused, index, onClick, setRef }: { 
   block: TranscriptLine, 
   onSeek: (time: number) => void, 
   onVocabClick: (text: string) => void,
   isFocused: boolean,
   index: number,
-  onClick: () => void
+  onClick: () => void,
+  setRef: (el: HTMLElement | null) => void
 }) => {
-  const rowRef = useRef<HTMLElement>(null);
-
   return (
     <article 
-      ref={rowRef}
+      ref={setRef}
       id={`transcript-segment-${index}`}
       data-time={block.startTime}
       data-index={index}
@@ -60,7 +62,7 @@ const TranscriptRow = memo(({ block, onSeek, onVocabClick, isFocused, index, onC
         isFocused ? 'border-indigo-600 bg-indigo-50/60 shadow-inner' : 'border-transparent hover:bg-slate-50/50'
       }`}
     >
-      {/* 點擊左側時間戳仍可控制音訊跳轉，但主要區塊點擊為聚焦閱讀 */}
+      {/* 點擊時間戳記仍保留跳轉功能 (作為主動跳轉手段) */}
       <aside 
         onClick={(e) => { e.stopPropagation(); onSeek(block.startTime); }}
         className={`w-16 shrink-0 flex items-start justify-center py-6 font-mono text-xs transition-all group/time ${isFocused ? 'text-indigo-600 font-bold' : 'text-gray-400 hover:text-indigo-600'}`}
@@ -71,24 +73,16 @@ const TranscriptRow = memo(({ block, onSeek, onVocabClick, isFocused, index, onC
       <div className={`flex-1 flex flex-col border-l ${isFocused ? 'border-indigo-200' : 'border-gray-100'}`}>
         {block.segments.map((seg, sIdx) => (
           <div key={sIdx} className="flex flex-col border-b border-gray-50 last:border-b-0">
-            <div className="px-6 py-5 flex flex-col space-y-3">
+            <div className="px-6 py-6 flex flex-col space-y-3">
               <div className="flex">
-                <span 
-                  className={`text-[10px] font-black uppercase w-fit px-1.5 py-0.5 rounded transition-colors ${isFocused ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'}`}
-                >
+                <span className={`text-[10px] font-black uppercase w-fit px-1.5 py-0.5 rounded transition-colors ${isFocused ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
                   {seg.speaker}
                 </span>
               </div>
-              <p 
-                lang="en"
-                className={`immersive-translate-target transcript-en-text text-[18px] leading-relaxed font-medium whitespace-pre-wrap select-text cursor-text ${isFocused ? 'text-slate-900' : 'text-slate-800'}`}
-              >
+              <p lang="en" className={`immersive-translate-target transcript-en-text text-xl md:text-[20px] leading-relaxed font-normal whitespace-pre-wrap select-text cursor-text ${isFocused ? 'text-slate-900' : 'text-slate-800'}`}>
                 {renderHighlightedText(seg.english, seg.highlights, onVocabClick)}
               </p>
-              <p 
-                lang="zh-TW"
-                className="immersive-translate-target transcript-zh-text text-[15px] leading-relaxed text-slate-500 italic border-l-2 border-slate-100 pl-4 whitespace-pre-wrap select-text cursor-text"
-              >
+              <p lang="zh-TW" className="immersive-translate-target transcript-zh-text text-base md:text-[16px] leading-relaxed text-slate-500 italic border-l-2 border-slate-100 pl-4 whitespace-pre-wrap select-text cursor-text">
                 {seg.chinese}
               </p>
             </div>
@@ -103,61 +97,38 @@ const TranscriptRow = memo(({ block, onSeek, onVocabClick, isFocused, index, onC
          prev.block.segments === next.block.segments;
 });
 
-const TranscriptViewer: React.FC<TranscriptViewerProps> = memo(({ lines, onSeek, onVocabClick, onAddToVocab }) => {
+const TranscriptViewer: React.FC<TranscriptViewerProps> = memo(({ lines, currentTime, readingIndex, onFocusSegment, onSeek, onVocabClick, onAddToVocab }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [readingIndex, setReadingIndex] = useState(0); 
+  const itemRefs = useRef<(HTMLElement | null)[]>([]);
   const [menuPos, setMenuPos] = useState<{ x: number, y: number } | null>(null);
   const [selectedText, setSelectedText] = useState("");
   const [selectedTime, setSelectedTime] = useState(0);
 
-  // 捲動至特定索引並聚焦
-  const scrollToIndex = useCallback((index: number) => {
-    const el = document.getElementById(`transcript-segment-${index}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, []);
-
-  const handleFocusSegment = useCallback((index: number) => {
-    setReadingIndex(index);
-    scrollToIndex(index);
-  }, [scrollToIndex]);
-
-  // 純手動導覽：上一句
-  const handlePrev = useCallback(() => {
-    setReadingIndex(prev => {
-      const nextIndex = Math.max(0, prev - 1);
-      scrollToIndex(nextIndex);
-      return nextIndex;
-    });
-  }, [scrollToIndex]);
-
-  // 純手動導覽：下一句
-  const handleNext = useCallback(() => {
-    setReadingIndex(prev => {
-      const nextIndex = Math.min(lines.length - 1, prev + 1);
-      scrollToIndex(nextIndex);
-      return nextIndex;
-    });
-  }, [lines.length, scrollToIndex]);
-
-  // 鍵盤監聽：上下鍵僅控制閱讀捲動，與音訊無關
+  // 初始化 refs 陣列
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeTag = document.activeElement?.tagName;
-      if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+    itemRefs.current = itemRefs.current.slice(0, lines.length);
+  }, [lines]);
 
-      if (e.code === 'ArrowUp') {
-        e.preventDefault();
-        handlePrev();
-      } else if (e.code === 'ArrowDown') {
-        e.preventDefault();
-        handleNext();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handlePrev, handleNext]);
+  // 【核心】自動置中捲動邏輯 (與播放解耦)
+  useEffect(() => {
+    const targetElement = itemRefs.current[readingIndex];
+    if (targetElement) {
+      targetElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  }, [readingIndex]);
+  
+  const handlePrev = useCallback(() => {
+    const nextIdx = Math.max(0, readingIndex - 1);
+    onFocusSegment(nextIdx);
+  }, [readingIndex, onFocusSegment]);
+
+  const handleNext = useCallback(() => {
+    const nextIdx = Math.min(lines.length - 1, readingIndex + 1);
+    onFocusSegment(nextIdx);
+  }, [readingIndex, lines.length, onFocusSegment]);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     const selection = window.getSelection();
@@ -168,7 +139,6 @@ const TranscriptViewer: React.FC<TranscriptViewerProps> = memo(({ lines, onSeek,
       const row = (e.target as HTMLElement).closest('[data-time]');
       const timeAttr = row?.getAttribute('data-time');
       const time = timeAttr ? parseFloat(timeAttr) : 0;
-
       setSelectedText(text);
       setSelectedTime(time);
       setMenuPos({ x: e.clientX, y: e.clientY });
@@ -179,31 +149,25 @@ const TranscriptViewer: React.FC<TranscriptViewerProps> = memo(({ lines, onSeek,
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-white relative" onContextMenu={handleContextMenu}>
-      {/* 懸浮導覽按鈕：純手動捲動控制 */}
-      <div className="absolute top-12 left-1/2 -translate-x-1/2 z-[40] flex items-center space-x-1 bg-white/90 backdrop-blur-md border border-slate-200 shadow-xl rounded-full px-2 py-1 select-none border-b-2 border-b-indigo-100">
-        <button 
-          onClick={(e) => { e.stopPropagation(); handlePrev(); }}
-          className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all flex items-center space-x-1"
-          title="上一句 (Up Arrow)"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
-          <span className="text-[10px] font-bold mr-1">Prev</span>
-        </button>
-        <div className="w-px h-4 bg-slate-200 mx-1" />
-        <button 
-          onClick={(e) => { e.stopPropagation(); handleNext(); }}
-          className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all flex items-center space-x-1"
-          title="下一句 (Down Arrow)"
-        >
-          <span className="text-[10px] font-bold ml-1">Next</span>
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-        </button>
-      </div>
-
-      <header className="border-b bg-slate-50 flex items-center px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest sticky top-0 z-10 shrink-0 shadow-sm">
+      <header className="border-b bg-slate-50 flex items-center px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest sticky top-0 z-10 shrink-0 shadow-sm transition-colors">
         <div className="w-16 shrink-0 text-center">Time</div>
-        <div className="flex-1 px-4 border-l border-slate-200">
-          Manual Reading Mode (Click any row to focus)
+        <div className="flex-1 px-4 border-l border-slate-200 flex items-center justify-between">
+          <span>Decoupled Reading Mode (Navigating won't interrupt audio)</span>
+          
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={handlePrev}
+              className="px-2 py-1 bg-white border border-slate-200 rounded text-indigo-600 hover:bg-indigo-50 transition-colors shadow-sm active:scale-95"
+            >
+              PREV
+            </button>
+            <button 
+              onClick={handleNext}
+              className="px-2 py-1 bg-white border border-slate-200 rounded text-indigo-600 hover:bg-indigo-50 transition-colors shadow-sm active:scale-95"
+            >
+              NEXT
+            </button>
+          </div>
         </div>
       </header>
       
@@ -219,7 +183,8 @@ const TranscriptViewer: React.FC<TranscriptViewerProps> = memo(({ lines, onSeek,
                 onSeek={onSeek} 
                 onVocabClick={onVocabClick} 
                 isFocused={isFocused}
-                onClick={() => handleFocusSegment(i)}
+                onClick={() => onFocusSegment(i)}
+                setRef={(el) => (itemRefs.current[i] = el)}
               />
             );
           })}
@@ -239,6 +204,6 @@ const TranscriptViewer: React.FC<TranscriptViewerProps> = memo(({ lines, onSeek,
       )}
     </div>
   );
-}, (prev, next) => prev.lines === next.lines);
+}, (prev, next) => prev.lines === next.lines && prev.currentTime === next.currentTime && prev.readingIndex === next.readingIndex);
 
 export default TranscriptViewer;
