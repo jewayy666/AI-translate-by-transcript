@@ -30,7 +30,7 @@ const renderHighlightedText = (text: string, highlights: Highlight[], onVocabCli
             e.stopPropagation();
             onVocabClick(isMatch.text);
           }}
-          className="text-red-600 font-medium border-b-2 border-transparent hover:border-red-600 transition-all cursor-pointer mx-0.5 select-text"
+          className="text-red-600 dark:text-red-400 font-medium border-b-2 border-transparent hover:border-red-600 dark:hover:border-red-400 transition-all cursor-pointer mx-0.5 select-text"
           style={{ userSelect: 'text' }}
           title={`${isMatch.ipa} - ${isMatch.meaning}`}
         >
@@ -59,29 +59,31 @@ const TranscriptRow = memo(({ block, onSeek, onVocabClick, isFocused, index, onC
       data-index={index}
       onClick={onClick}
       className={`immersive-translate-target-wrapper flex items-stretch transition-all border-l-4 cursor-pointer ${
-        isFocused ? 'border-indigo-600 bg-indigo-50/60 shadow-inner' : 'border-transparent hover:bg-slate-50/50'
+        isFocused 
+          ? 'border-indigo-600 bg-indigo-50/60 dark:bg-indigo-900/30 shadow-inner' 
+          : 'border-transparent hover:bg-slate-50/50 dark:hover:bg-gray-900/40'
       }`}
     >
       <aside 
         onClick={(e) => { e.stopPropagation(); onSeek(block.startTime); }}
-        className={`w-16 shrink-0 flex items-start justify-center py-6 font-mono text-xs transition-all group/time ${isFocused ? 'text-indigo-600 font-bold' : 'text-gray-400 hover:text-indigo-600'}`}
+        className={`w-16 shrink-0 flex items-start justify-center py-6 font-mono text-xs transition-all group/time ${isFocused ? 'text-indigo-600 dark:text-indigo-400 font-bold' : 'text-gray-400 dark:text-gray-600 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
       >
         <span className="group-hover/time:underline">{block.timestamp}</span>
       </aside>
 
-      <div className={`flex-1 flex flex-col border-l ${isFocused ? 'border-indigo-200' : 'border-gray-100'}`}>
+      <div className={`flex-1 flex flex-col border-l ${isFocused ? 'border-indigo-200 dark:border-indigo-900' : 'border-gray-100 dark:border-gray-800'}`}>
         {block.segments.map((seg, sIdx) => (
-          <div key={sIdx} className="flex flex-col border-b border-gray-50 last:border-b-0">
+          <div key={sIdx} className="flex flex-col border-b border-gray-50 dark:border-gray-900/50 last:border-b-0">
             <div className="px-6 py-6 flex flex-col space-y-3">
               <div className="flex">
-                <span className={`text-[10px] font-black uppercase w-fit px-1.5 py-0.5 rounded transition-colors ${isFocused ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                <span className={`text-[10px] font-black uppercase w-fit px-1.5 py-0.5 rounded transition-colors ${isFocused ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>
                   {seg.speaker}
                 </span>
               </div>
-              <p lang="en" className={`immersive-translate-target transcript-en-text text-xl md:text-[20px] leading-relaxed font-normal whitespace-pre-wrap select-text cursor-text ${isFocused ? 'text-slate-900' : 'text-slate-800'}`}>
+              <p lang="en" className={`immersive-translate-target transcript-en-text text-xl md:text-[20px] leading-relaxed font-normal whitespace-pre-wrap select-text cursor-text ${isFocused ? 'text-slate-900 dark:text-gray-100' : 'text-slate-800 dark:text-gray-300'}`}>
                 {renderHighlightedText(seg.english, seg.highlights, onVocabClick)}
               </p>
-              <p lang="zh-TW" className="immersive-translate-target transcript-zh-text text-base md:text-[16px] leading-relaxed text-slate-500 italic border-l-2 border-slate-100 pl-4 whitespace-pre-wrap select-text cursor-text">
+              <p lang="zh-TW" className="immersive-translate-target transcript-zh-text text-base md:text-[16px] leading-relaxed text-slate-500 dark:text-gray-500 italic border-l-2 border-slate-100 dark:border-gray-800 pl-4 whitespace-pre-wrap select-text cursor-text">
                 {seg.chinese}
               </p>
             </div>
@@ -107,7 +109,6 @@ const TranscriptViewer: React.FC<TranscriptViewerProps> = memo(({ lines, current
     itemRefs.current = itemRefs.current.slice(0, lines.length);
   }, [lines]);
 
-  // 自動置中捲動
   useEffect(() => {
     const targetElement = itemRefs.current[readingIndex];
     if (targetElement) {
@@ -118,7 +119,6 @@ const TranscriptViewer: React.FC<TranscriptViewerProps> = memo(({ lines, current
     }
   }, [readingIndex]);
 
-  // 【核心】鍵盤導覽邏輯：解耦 ArrowUp/Down，不執行 onSeek
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const activeTag = document.activeElement?.tagName;
     if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
@@ -167,11 +167,11 @@ const TranscriptViewer: React.FC<TranscriptViewerProps> = memo(({ lines, current
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-950 relative" onContextMenu={handleContextMenu}>
-      <header className="border-b dark:border-gray-800 bg-slate-50 dark:bg-gray-900 flex items-center px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest sticky top-0 z-10 shrink-0 shadow-sm transition-colors">
+    <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-950 relative transition-colors" onContextMenu={handleContextMenu}>
+      <header className="border-b dark:border-gray-800 bg-slate-50 dark:bg-gray-900 flex items-center px-4 py-2 text-[10px] font-bold text-slate-400 dark:text-gray-500 uppercase tracking-widest sticky top-0 z-10 shrink-0 shadow-sm transition-colors">
         <div className="w-16 shrink-0 text-center">Time</div>
         <div className="flex-1 px-4 border-l border-slate-200 dark:border-gray-800 flex items-center justify-between">
-          <span>Decoupled Reading Mode (↑/↓ to Navigate)</span>
+          <span className="dark:text-gray-400 text-xs">Decoupled Reading Mode (↑/↓ to Navigate)</span>
           
           <div className="flex items-center space-x-2">
             <button 
